@@ -13,11 +13,17 @@ import {
   Calendar,
   Sparkles,
   RotateCcw,
+  Phone,
+  Layers,
+  Search,
+  X,
 } from "lucide-react";
 import { parseCsv } from "@/lib/csv";
-import { filterRows, uniqueOutcomes } from "@/lib/filter";
+import { filterRows, uniqueOutcomes, uniqueTemplates } from "@/lib/filter";
 import { buildAudioFilename } from "@/lib/sanitize";
 import type { CsvRow } from "@/lib/types";
+
+type Template = { id: string; name: string; is_active: boolean };
 
 type Stage = "idle" | "submitting" | "running" | "done" | "error";
 
@@ -30,6 +36,13 @@ export default function Page() {
   const [csvName, setCsvName] = useState<string | null>(null);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [selectedOutcomes, setSelectedOutcomes] = useState<string[]>([]);
+  const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
+  const [mobileQuery, setMobileQuery] = useState("");
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [remoteTemplates, setRemoteTemplates] = useState<Template[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
@@ -57,15 +70,72 @@ export default function Page() {
   }, [rememberToken, token]);
 
   const outcomes = useMemo(() => uniqueOutcomes(rows), [rows]);
+  const csvTemplates = useMemo(() => uniqueTemplates(rows), [rows]);
+  const allTemplates = useMemo(() => {
+    const map = new Map<string, Template>();
+    for (const t of remoteTemplates) map.set(t.name, t);
+    for (const name of csvTemplates) {
+      if (!map.has(name)) map.set(name, { id: name, name, is_active: true });
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [remoteTemplates, csvTemplates]);
+  const visibleTemplates = useMemo(() => {
+    const q = templateSearch.trim().toLowerCase();
+    if (!q) return allTemplates;
+    return allTemplates.filter((t) => t.name.toLowerCase().includes(q));
+  }, [allTemplates, templateSearch]);
+
   const filtered = useMemo(
     () =>
       filterRows(rows, {
         outcomes: selectedOutcomes,
+        templates: selectedTemplates,
+        mobileSubstring: mobileQuery || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
       }),
-    [rows, selectedOutcomes, startDate, endDate]
+    [
+      rows,
+      selectedOutcomes,
+      selectedTemplates,
+      mobileQuery,
+      startDate,
+      endDate,
+    ]
   );
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const clean = token.trim();
+    if (!clean) {
+      setRemoteTemplates([]);
+      setTemplatesError(null);
+      return;
+    }
+    const handle = window.setTimeout(async () => {
+      setTemplatesLoading(true);
+      setTemplatesError(null);
+      try {
+        const res = await fetch("/api/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error ?? `HTTP ${res.status}`);
+        }
+        setRemoteTemplates((data.templates ?? []) as Template[]);
+      } catch (e) {
+        setTemplatesError(e instanceof Error ? e.message : String(e));
+        setRemoteTemplates([]);
+      } finally {
+        setTemplatesLoading(false);
+      }
+    }, 600);
+    return () => window.clearTimeout(handle);
+  }, [token]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const onFile = async (file: File) => {
     setCsvName(file.name);
@@ -74,6 +144,8 @@ export default function Page() {
     setRows(parsed);
     setCsvErrors(errors);
     setSelectedOutcomes([]);
+    setSelectedTemplates([]);
+    setMobileQuery("");
     setStartDate("");
     setEndDate("");
   };
@@ -81,6 +153,12 @@ export default function Page() {
   const toggleOutcome = (o: string) => {
     setSelectedOutcomes((prev) =>
       prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]
+    );
+  };
+
+  const toggleTemplate = (name: string) => {
+    setSelectedTemplates((prev) =>
+      prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
     );
   };
 
@@ -283,6 +361,148 @@ export default function Page() {
         <Card>
           <Step number={3} done={stepDone[3]} title="Filters" icon={Filter}>
             <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-medium text-[var(--muted)] mb-2">
+                  <Layers className="inline h-3 w-3 mr-1 -mt-0.5" />
+                  Template{" "}
+                  <span className="text-[var(--muted-2)]">
+                    (none = all)
+                  </span>
+                  {templatesLoading && (
+                    <Loader2 className="inline ml-2 h-3 w-3 animate-spin text-[var(--accent)]" />
+                  )}
+                </label>
+
+                {selectedTemplates.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {selectedTemplates.map((name) => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent)] text-white text-[11px] font-medium"
+                      >
+                        <span className="font-mono">{name}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${name}`}
+                          onClick={() => toggleTemplate(name)}
+                          className="rounded-full hover:bg-white/20 p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setTemplatesOpen((v) => !v)}
+                    className="w-full inline-flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm hover:border-[var(--border-strong)] transition"
+                  >
+                    <span className="text-[var(--muted)]">
+                      {selectedTemplates.length > 0
+                        ? `${selectedTemplates.length} selected`
+                        : allTemplates.length > 0
+                          ? `Pick from ${allTemplates.length} templates`
+                          : "No templates available yet"}
+                    </span>
+                    <Search className="h-3.5 w-3.5 text-[var(--muted-2)]" />
+                  </button>
+
+                  {templatesOpen && (
+                    <div className="absolute z-20 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg overflow-hidden">
+                      <div className="p-2 border-b border-[var(--border)]">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={templateSearch}
+                          onChange={(e) => setTemplateSearch(e.target.value)}
+                          placeholder="Search templates…"
+                          className="w-full rounded-md bg-[var(--surface-muted)] border border-transparent focus:border-[var(--accent)] focus:outline-none px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <ul className="max-h-60 overflow-y-auto py-1 text-sm">
+                        {visibleTemplates.length === 0 && (
+                          <li className="px-3 py-2 text-xs text-[var(--muted-2)]">
+                            No templates match.
+                          </li>
+                        )}
+                        {visibleTemplates.map((t) => {
+                          const active = selectedTemplates.includes(t.name);
+                          return (
+                            <li key={t.id}>
+                              <button
+                                type="button"
+                                onClick={() => toggleTemplate(t.name)}
+                                className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-[var(--accent-soft)] transition ${
+                                  active ? "text-[var(--accent)]" : ""
+                                }`}
+                              >
+                                <span className="font-mono text-xs truncate">
+                                  {t.name}
+                                </span>
+                                <span className="flex items-center gap-1.5 shrink-0">
+                                  {!t.is_active && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--muted-2)]">
+                                      inactive
+                                    </span>
+                                  )}
+                                  {active && (
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                  )}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <div className="flex items-center justify-between border-t border-[var(--border)] px-3 py-1.5 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTemplates([])}
+                          disabled={selectedTemplates.length === 0}
+                          className="text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-40"
+                        >
+                          Clear all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplatesOpen(false)}
+                          className="font-medium text-[var(--accent)] hover:opacity-80"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {templatesError && (
+                  <p className="mt-1 text-xs text-[var(--warning)]">
+                    Couldn&apos;t load templates: {templatesError}. Falling back
+                    to templates found in CSV.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-[var(--muted)] mb-2">
+                  <Phone className="inline h-3 w-3 mr-1 -mt-0.5" />
+                  Mobile number{" "}
+                  <span className="text-[var(--muted-2)]">
+                    (partial match)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="tel"
+                  value={mobileQuery}
+                  onChange={(e) => setMobileQuery(e.target.value)}
+                  placeholder="e.g. 9945 or +91 80889"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm font-mono placeholder:font-sans placeholder:text-[var(--muted-2)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-[var(--muted)] mb-2">
                   Outcomes{" "}
