@@ -17,11 +17,15 @@ import {
   Layers,
   Search,
   X,
+  Headphones,
+  Info,
 } from "lucide-react";
+import Image from "next/image";
 import { parseCsv } from "@/lib/csv";
 import { filterRows, uniqueOutcomes, uniqueTemplates } from "@/lib/filter";
 import { buildAudioFilename } from "@/lib/sanitize";
 import type { CsvRow } from "@/lib/types";
+import { PreviewPanel } from "./PreviewPanel";
 
 type Template = { id: string; name: string; is_active: boolean };
 
@@ -52,6 +56,8 @@ export default function Page() {
     failed: number;
   }>({ total: 0, completed: 0, failed: 0 });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [outcomesGuideOpen, setOutcomesGuideOpen] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -504,7 +510,15 @@ export default function Page() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[var(--muted)] mb-2">
+                <label className="text-xs font-medium text-[var(--muted)] mb-2 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setOutcomesGuideOpen(true)}
+                    aria-label="What do these outcomes mean?"
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-soft)] transition"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
                   Outcomes{" "}
                   <span className="text-[var(--muted-2)]">
                     (none = all)
@@ -586,6 +600,17 @@ export default function Page() {
               )}
               <button
                 type="button"
+                onClick={() => setPreviewOpen((v) => !v)}
+                disabled={
+                  rows.length === 0 || filtered.length === 0 || !token || busy
+                }
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] text-sm font-medium hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <Headphones className="h-4 w-4" />
+                {previewOpen ? "Hide preview" : "Preview & play"}
+              </button>
+              <button
+                type="button"
                 onClick={submit}
                 disabled={busy || rows.length === 0 || filtered.length === 0}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
@@ -654,6 +679,10 @@ export default function Page() {
         </Card>
       </div>
 
+      {previewOpen && filtered.length > 0 && token && (
+        <PreviewPanel rows={filtered} token={token} />
+      )}
+
       <footer className="pt-2 text-xs text-[var(--muted)] flex flex-wrap gap-x-4 gap-y-1">
         <span>
           File naming:{" "}
@@ -668,7 +697,85 @@ export default function Page() {
           Token never leaves this session.
         </span>
       </footer>
+
+      {outcomesGuideOpen && (
+        <OutcomesGuide onClose={() => setOutcomesGuideOpen(false)} />
+      )}
     </main>
+  );
+}
+
+function OutcomesGuide({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto p-4 sm:p-8"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="outcomes-guide-title"
+    >
+      <div
+        className="relative w-full max-w-3xl rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+          <h2
+            id="outcomes-guide-title"
+            className="text-base font-semibold tracking-tight"
+          >
+            Outcome reference
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1.5 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+        <div className="space-y-6 p-5 sm:p-6">
+          <figure className="space-y-2">
+            <figcaption className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
+              Flow completed
+            </figcaption>
+            <Image
+              src="/outcomes-guide/flow-completed.png"
+              alt="Outcomes when the flow completed: RESOLVED, RESOLVED_NO_TEST_RIDE, DRIVER_NOT_FOUND, ERROR, DRIVER_NOT_INTERESTED, transferred, BLOCKED_REDIRECT"
+              width={1400}
+              height={420}
+              className="w-full h-auto rounded-lg border border-[var(--border)]"
+              priority
+            />
+          </figure>
+          <figure className="space-y-2">
+            <figcaption className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
+              Flow did not complete (driver hung up mid-flow)
+            </figcaption>
+            <Image
+              src="/outcomes-guide/flow-incomplete.png"
+              alt="Outcomes when the driver hung up mid-flow: BUSY, BLOCKED, NOT_BLOCKED, DRIVER_FOUND, FURTHER_ASSISTANCE_REQUESTED, TEST_RIDE_REQUESTED, TEST_RIDE_SUCCESS"
+              width={1400}
+              height={420}
+              className="w-full h-auto rounded-lg border border-[var(--border)]"
+            />
+          </figure>
+        </div>
+      </div>
+    </div>
   );
 }
 
