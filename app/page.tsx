@@ -1,65 +1,496 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  KeyRound,
+  Upload,
+  Filter,
+  Download,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet,
+  Calendar,
+  Sparkles,
+  RotateCcw,
+} from "lucide-react";
+import { parseCsv } from "@/lib/csv";
+import { filterRows, uniqueOutcomes } from "@/lib/filter";
+import { buildAudioFilename } from "@/lib/sanitize";
+import type { CsvRow } from "@/lib/types";
+
+type Stage = "idle" | "submitting" | "running" | "done" | "error";
+
+const TOKEN_KEY = "breeze-bearer-token";
+
+export default function Page() {
+  const [token, setToken] = useState("");
+  const [rememberToken, setRememberToken] = useState(false);
+  const [rows, setRows] = useState<CsvRow[]>([]);
+  const [csvName, setCsvName] = useState<string | null>(null);
+  const [csvErrors, setCsvErrors] = useState<string[]>([]);
+  const [selectedOutcomes, setSelectedOutcomes] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [stage, setStage] = useState<Stage>("idle");
+  const [progress, setProgress] = useState<{
+    total: number;
+    completed: number;
+    failed: number;
+  }>({ total: 0, completed: 0, failed: 0 });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const t = sessionStorage.getItem(TOKEN_KEY);
+    if (t) {
+      setToken(t);
+      setRememberToken(true);
+    }
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (rememberToken && token) sessionStorage.setItem(TOKEN_KEY, token);
+    if (!rememberToken) sessionStorage.removeItem(TOKEN_KEY);
+  }, [rememberToken, token]);
+
+  const outcomes = useMemo(() => uniqueOutcomes(rows), [rows]);
+  const filtered = useMemo(
+    () =>
+      filterRows(rows, {
+        outcomes: selectedOutcomes,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      }),
+    [rows, selectedOutcomes, startDate, endDate]
+  );
+
+  const onFile = async (file: File) => {
+    setCsvName(file.name);
+    const text = await file.text();
+    const { rows: parsed, errors } = parseCsv(text);
+    setRows(parsed);
+    setCsvErrors(errors);
+    setSelectedOutcomes([]);
+    setStartDate("");
+    setEndDate("");
+  };
+
+  const toggleOutcome = (o: string) => {
+    setSelectedOutcomes((prev) =>
+      prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]
+    );
+  };
+
+  const submit = async () => {
+    if (!token) {
+      setErrorMessage("Please paste your Bearer token first.");
+      return;
+    }
+    if (filtered.length === 0) {
+      setErrorMessage("No rows match your filters.");
+      return;
+    }
+    setErrorMessage(null);
+    setStage("submitting");
+    setProgress({ total: filtered.length, completed: 0, failed: 0 });
+
+    const items = filtered.map((r) => ({
+      callId: r.callId,
+      filename: buildAudioFilename({
+        mobile: r.mobile,
+        name: r.name,
+        callId: r.callId,
+      }),
+    }));
+
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, items }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Job creation failed (${res.status})`);
+      }
+      const { id } = (await res.json()) as { id: string };
+      pollJob(id);
+      setStage("running");
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+      setStage("error");
+    }
+  };
+
+  const pollJob = (id: string) => {
+    if (pollRef.current) window.clearInterval(pollRef.current);
+    pollRef.current = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/jobs/${id}`);
+        if (!res.ok) throw new Error(`Status check failed (${res.status})`);
+        const data = (await res.json()) as {
+          status: Stage;
+          total: number;
+          completed: number;
+          failed: number;
+          errorMessage?: string;
+        };
+        setProgress({
+          total: data.total,
+          completed: data.completed,
+          failed: data.failed,
+        });
+        if (data.status === "done") {
+          stopPolling();
+          setStage("done");
+          window.location.href = `/api/jobs/${id}/download`;
+        } else if (data.status === "error") {
+          stopPolling();
+          setStage("error");
+          setErrorMessage(data.errorMessage ?? "Extraction failed.");
+        }
+      } catch (e) {
+        stopPolling();
+        setStage("error");
+        setErrorMessage(e instanceof Error ? e.message : String(e));
+      }
+    }, 800);
+  };
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => () => stopPolling(), []);
+
+  const reset = () => {
+    stopPolling();
+    setStage("idle");
+    setProgress({ total: 0, completed: 0, failed: 0 });
+    setErrorMessage(null);
+  };
+
+  const busy = stage === "submitting" || stage === "running";
+  const pct =
+    progress.total > 0
+      ? Math.min(
+          100,
+          Math.round(
+            ((progress.completed + progress.failed) / progress.total) * 100
+          )
+        )
+      : 0;
+
+  const stepDone = {
+    1: token.length > 0,
+    2: rows.length > 0,
+    3: rows.length > 0,
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:py-16 space-y-8">
+      <header className="space-y-3">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)] shadow-sm">
+          <Sparkles className="h-3 w-3 text-[var(--accent)]" />
+          Breeze Buddy · Recording Extractor
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">
+          Bulk-download call recordings
+        </h1>
+        <p className="text-sm sm:text-base text-[var(--muted)] max-w-xl">
+          Upload your daily CSV, filter the rows you care about, and grab every
+          matching recording as a single ZIP — usually under a minute.
+        </p>
+      </header>
+
+      <Card>
+        <Step number={1} done={stepDone[1]} title="Bearer token" icon={KeyRound}>
+          <input
+            type="password"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3.5 py-2.5 text-sm font-mono placeholder:font-sans placeholder:text-[var(--muted-2)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
+            placeholder="Paste your Authorization Bearer token"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            autoComplete="off"
+          />
+          <label className="mt-2 inline-flex items-center gap-2 text-xs text-[var(--muted)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rememberToken}
+              onChange={(e) => setRememberToken(e.target.checked)}
+              className="h-3.5 w-3.5 rounded accent-[var(--accent)]"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Remember in this browser tab
+          </label>
+        </Step>
+      </Card>
+
+      <Card>
+        <Step
+          number={2}
+          done={stepDone[2]}
+          title="CSV file"
+          icon={FileSpreadsheet}
+        >
+          <label className="group relative block w-full cursor-pointer rounded-lg border-2 border-dashed border-[var(--border-strong)] bg-[var(--surface-muted)] px-4 py-6 text-center transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onFile(f);
+              }}
+              className="sr-only"
+            />
+            <Upload className="mx-auto h-5 w-5 text-[var(--muted)] group-hover:text-[var(--accent)] transition" />
+            <p className="mt-2 text-sm font-medium">
+              {csvName ? (
+                <>
+                  <span className="font-mono">{csvName}</span>
+                </>
+              ) : (
+                "Click to upload, or drop a CSV here"
+              )}
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              {csvName
+                ? `${rows.length} rows loaded · click to replace`
+                : "Expected: call_details_YYYY-MM-DD.csv"}
+            </p>
+          </label>
+          {csvErrors.length > 0 && (
+            <details className="mt-3 text-xs text-[var(--warning)]">
+              <summary className="cursor-pointer">
+                {csvErrors.length} parsing warning(s)
+              </summary>
+              <ul className="list-disc ml-5 mt-1 space-y-0.5">
+                {csvErrors.slice(0, 10).map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </Step>
+      </Card>
+
+      {rows.length > 0 && (
+        <Card>
+          <Step number={3} done={stepDone[3]} title="Filters" icon={Filter}>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-medium text-[var(--muted)] mb-2">
+                  Outcomes{" "}
+                  <span className="text-[var(--muted-2)]">
+                    (none = all)
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {outcomes.map((o) => {
+                    const active = selectedOutcomes.includes(o);
+                    return (
+                      <button
+                        key={o}
+                        type="button"
+                        onClick={() => toggleOutcome(o)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                          active
+                            ? "bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm"
+                            : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--foreground)]"
+                        }`}
+                      >
+                        {o}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-2">
+                    <Calendar className="inline h-3 w-3 mr-1 -mt-0.5" />
+                    Start date
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-2">
+                    <Calendar className="inline h-3 w-3 mr-1 -mt-0.5" />
+                    End date
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
+                  />
+                </div>
+              </div>
+            </div>
+          </Step>
+        </Card>
+      )}
+
+      <div className="sticky bottom-4 z-10">
+        <Card>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-semibold tabular-nums">
+                {filtered.length}
+              </span>
+              <span className="text-sm text-[var(--muted)]">
+                of {rows.length} recordings ready
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {(stage === "done" || stage === "error") && (
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] text-sm hover:border-[var(--border-strong)] transition"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Start over
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={submit}
+                disabled={busy || rows.length === 0 || filtered.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {busy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Working…
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Download ZIP
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {busy && (
+            <div className="mt-4 space-y-2">
+              <div className="h-1.5 w-full bg-[var(--surface-muted)] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[var(--accent)] transition-[width] duration-300"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-[var(--muted)] tabular-nums">
+                <span>
+                  {progress.completed + progress.failed} / {progress.total} done
+                </span>
+                <div className="flex items-center gap-3">
+                  {progress.completed > 0 && (
+                    <span className="text-[var(--success)]">
+                      ✓ {progress.completed}
+                    </span>
+                  )}
+                  {progress.failed > 0 && (
+                    <span className="text-[var(--warning)]">
+                      ! {progress.failed}
+                    </span>
+                  )}
+                  <span>{pct}%</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {stage === "done" && (
+            <p className="mt-3 flex items-start gap-2 text-sm text-[var(--success)]">
+              <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                ZIP downloaded.{" "}
+                {progress.failed > 0
+                  ? `Includes _errors.csv with ${progress.failed} failure(s).`
+                  : "All recordings included."}
+              </span>
+            </p>
+          )}
+          {errorMessage && (
+            <p className="mt-3 flex items-start gap-2 text-sm text-[var(--danger)]">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{errorMessage}</span>
+            </p>
+          )}
+        </Card>
+      </div>
+
+      <footer className="pt-2 text-xs text-[var(--muted)] flex flex-wrap gap-x-4 gap-y-1">
+        <span>
+          File naming:{" "}
+          <code className="font-mono text-[var(--foreground)]/80">
+            mobile_name_callId.mp3
+          </code>
+        </span>
+        <span>
+          Failures → <code className="font-mono">_errors.csv</code>
+        </span>
+        <span className="ml-auto opacity-60">
+          Token never leaves this session.
+        </span>
+      </footer>
+    </main>
+  );
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-[var(--surface)]/80">
+      {children}
+    </section>
+  );
+}
+
+function Step({
+  number,
+  done,
+  title,
+  icon: Icon,
+  children,
+}: {
+  number: number;
+  done: boolean;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-3">
+        <div
+          className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition ${
+            done
+              ? "bg-[var(--accent)] text-white"
+              : "bg-[var(--surface-muted)] text-[var(--muted)] border border-[var(--border)]"
+          }`}
+        >
+          {done ? <CheckCircle2 className="h-4 w-4" /> : number}
         </div>
-      </main>
+        <h2 className="text-sm font-semibold tracking-tight flex items-center gap-2">
+          <Icon className="h-4 w-4 text-[var(--muted)]" />
+          {title}
+        </h2>
+      </div>
+      <div className="pl-10">{children}</div>
     </div>
   );
 }
