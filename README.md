@@ -55,6 +55,39 @@ Deploy on any host that runs Docker (Railway, Render, Fly.io, EC2, etc.).
 | Env var                | Default                                                                              | Purpose                                                  |
 | ---------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------- |
 | `BREEZE_RECORDING_URL` | `https://clairvoyance.breezelabs.app/agent/voice/breeze-buddy/leads/recording`        | Base URL the server calls; the Call ID is appended.      |
+| `BREEZE_TEMPLATES_URL` | `https://clairvoyance.breezelabs.app/agent/voice/breeze-buddy/templates/list`         | Templates list endpoint for the Template filter.         |
+| `BREEZE_LOGIN_URL`     | `https://clairvoyance.breezelabs.app/agent/voice/breeze-buddy/login`                  | Login endpoint; username/password is exchanged for a token. |
+| `BREEZE_LEADS_URL`     | `https://clairvoyance.breezelabs.app/agent/voice/breeze-buddy/leads`                  | Base URL for lead/transcription lookups; the Call ID is appended. |
+| `BREEZE_ANALYTICS_URL` | `https://clairvoyance.breezelabs.app/agent/voice/breeze-buddy/analytics`              | Analytics endpoint used by the Analytics dashboard tab. |
+| `EVALUATOR_URL`        | `http://localhost:8000`                                                              | Base URL of the Python evaluator sidecar (see below).    |
+
+## AI evaluation (Prodloop)
+
+Call recordings can be evaluated with the Prodloop SDK (latency, hallucination,
+extraction accuracy, conversation-flow compliance, etc.). Because the SDK is
+Python-only, evaluation runs in a **FastAPI sidecar** under
+[`evaluator-service/`](./evaluator-service/README.md).
+
+Flow: the **Evaluate** button in the Preview list → Next.js `POST /api/evaluate`
+fetches the recording by Call ID (reusing the breeze token), then forwards the
+audio to the sidecar, which calls `ProdloopClient.evaluate_call()`.
+
+To use it, run both processes:
+
+```bash
+# terminal 1 — Next.js
+npm run dev
+
+# terminal 2 — Python sidecar
+cd evaluator-service
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env   # then set PRODLOOP_API_KEY
+uvicorn app.main:app --reload --port 8000
+```
+
+Point Next.js at the sidecar with `EVALUATOR_URL` if it's not on
+`http://localhost:8000`.
 
 ## How to get the Bearer token
 

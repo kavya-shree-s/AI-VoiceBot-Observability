@@ -8,8 +8,11 @@ import {
   AlertCircle,
   Download as DownloadIcon,
   Info,
+  Sparkles,
 } from "lucide-react";
 import type { CsvRow } from "@/lib/types";
+import { EvaluateModal } from "./EvaluateModal";
+import { useAuth } from "./auth-context";
 
 function parseMetadata(raw: string): Record<string, unknown> | null {
   if (!raw || !raw.trim()) return null;
@@ -47,18 +50,15 @@ type RowState = {
 
 const PAGE_SIZE = 25;
 
-export function PreviewPanel({
-  rows,
-  token,
-}: {
-  rows: CsvRow[];
-  token: string;
-}) {
+export function PreviewPanel({ rows }: { rows: CsvRow[] }) {
+  const { token: authToken, signOut } = useAuth();
+  const token = authToken ?? "";
   const [page, setPage] = useState(0);
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [openInfoCallId, setOpenInfoCallId] = useState<string | null>(null);
+  const [evalRow, setEvalRow] = useState<CsvRow | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const blobUrlsRef = useRef<Set<string>>(new Set());
 
@@ -100,6 +100,10 @@ export function PreviewPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, callId }),
       });
+      if (res.status === 401 || res.status === 403) {
+        signOut({ expired: true });
+        return null;
+      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error ?? `HTTP ${res.status}`);
@@ -274,6 +278,16 @@ export function PreviewPanel({
               </div>
               <button
                 type="button"
+                onClick={() => setEvalRow(r)}
+                aria-label="Evaluate this recording"
+                title="Evaluate with Prodloop"
+                className="shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-soft)] transition"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Evaluate
+              </button>
+              <button
+                type="button"
                 onClick={() =>
                   downloadRow(
                     r.callId,
@@ -339,6 +353,10 @@ export function PreviewPanel({
             </button>
           </div>
         </footer>
+      )}
+
+      {evalRow && (
+        <EvaluateModal row={evalRow} onClose={() => setEvalRow(null)} />
       )}
     </section>
   );

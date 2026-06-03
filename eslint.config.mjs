@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Python sidecar (its own toolchain; not part of the Next.js lint scope).
+    "evaluator-service/**",
   ]),
 ]);
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  KeyRound,
+  LogOut,
   Upload,
   Filter,
   Download,
+  FileText,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -26,16 +27,94 @@ import { filterRows, uniqueOutcomes, uniqueTemplates } from "@/lib/filter";
 import { buildAudioFilename } from "@/lib/sanitize";
 import type { CsvRow } from "@/lib/types";
 import { PreviewPanel } from "./PreviewPanel";
+import { useAuth } from "./auth-context";
+import { LoginGate } from "./LoginGate";
+import { AnalyticsTab } from "./analytics/AnalyticsTab";
 
 type Template = { id: string; name: string; is_active: boolean };
 
 type Stage = "idle" | "submitting" | "running" | "done" | "error";
 
-const TOKEN_KEY = "breeze-bearer-token";
-
 export default function Page() {
-  const [token, setToken] = useState("");
-  const [rememberToken, setRememberToken] = useState(false);
+  const { token, hydrated } = useAuth();
+  if (!hydrated) return null;
+  if (!token) return <LoginGate />;
+  return <Shell />;
+}
+
+type TabKey = "extractor" | "analytics";
+
+function Shell() {
+  const { signOut } = useAuth();
+  const [tab, setTab] = useState<TabKey>("extractor");
+  return (
+    <>
+      <header className="mx-auto w-full max-w-6xl px-5 pt-8 sm:pt-10">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)] shadow-sm">
+            <Sparkles className="h-3 w-3 text-[var(--accent)]" />
+            Breeze Buddy
+          </div>
+          <div className="flex items-center gap-1">
+            <TabButton active={tab === "extractor"} onClick={() => setTab("extractor")}>
+              Extractor
+            </TabButton>
+            <TabButton active={tab === "analytics"} onClick={() => setTab("analytics")}>
+              Analytics
+            </TabButton>
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--foreground)] transition"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </button>
+          </div>
+        </div>
+      </header>
+      {tab === "extractor" ? (
+        <Extractor />
+      ) : (
+        <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:py-10">
+          <AnalyticsTab />
+        </main>
+      )}
+    </>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+        active
+          ? "bg-[var(--accent)] text-white"
+          : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--border-strong)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Extractor() {
+  const { token: authToken, signOut } = useAuth();
+  const token = authToken ?? "";
+  const onAuthError = useCallback(
+    () => signOut({ expired: true }),
+    [signOut]
+  );
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [csvName, setCsvName] = useState<string | null>(null);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
@@ -49,6 +128,9 @@ export default function Page() {
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcriptMsg, setTranscriptMsg] = useState<string | null>(null);
+  const [transcriptKeyword, setTranscriptKeyword] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
   const [progress, setProgress] = useState<{
     total: number;
@@ -59,21 +141,6 @@ export default function Page() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [outcomesGuideOpen, setOutcomesGuideOpen] = useState(false);
   const pollRef = useRef<number | null>(null);
-
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    const t = sessionStorage.getItem(TOKEN_KEY);
-    if (t) {
-      setToken(t);
-      setRememberToken(true);
-    }
-  }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  useEffect(() => {
-    if (rememberToken && token) sessionStorage.setItem(TOKEN_KEY, token);
-    if (!rememberToken) sessionStorage.removeItem(TOKEN_KEY);
-  }, [rememberToken, token]);
 
   const outcomes = useMemo(() => uniqueOutcomes(rows), [rows]);
   const csvTemplates = useMemo(() => uniqueTemplates(rows), [rows]);
@@ -127,6 +194,10 @@ export default function Page() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
         });
+        if (res.status === 401 || res.status === 403) {
+          onAuthError();
+          return;
+        }
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(data.error ?? `HTTP ${res.status}`);
@@ -140,7 +211,7 @@ export default function Page() {
       }
     }, 600);
     return () => window.clearTimeout(handle);
-  }, [token]);
+  }, [token, onAuthError]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const onFile = async (file: File) => {
@@ -170,7 +241,7 @@ export default function Page() {
 
   const submit = async () => {
     if (!token) {
-      setErrorMessage("Please paste your Bearer token first.");
+      onAuthError();
       return;
     }
     if (filtered.length === 0) {
@@ -196,6 +267,10 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, items }),
       });
+      if (res.status === 401 || res.status === 403) {
+        onAuthError();
+        return;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? `Job creation failed (${res.status})`);
@@ -206,6 +281,81 @@ export default function Page() {
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : String(e));
       setStage("error");
+    }
+  };
+
+  const downloadTranscriptions = async () => {
+    if (!token) {
+      onAuthError();
+      return;
+    }
+    if (filtered.length === 0) {
+      setErrorMessage("No rows match your filters.");
+      return;
+    }
+    setErrorMessage(null);
+    setTranscriptMsg(null);
+    setTranscribing(true);
+
+    const items = filtered.map((r) => ({
+      leadId: r.leadId,
+      callId: r.callId,
+      phone: r.mobile,
+      name: r.name,
+      template: r.template,
+      outcome: r.outcome,
+      startTime: r.startTime,
+    }));
+
+    const keyword = transcriptKeyword.trim();
+    try {
+      const res = await fetch("/api/transcriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, items, keyword }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        onAuthError();
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          err.error ?? `Transcription export failed (${res.status})`
+        );
+      }
+      const matchCount = Number(res.headers.get("X-Match-Count") ?? "0");
+      const totalCount = Number(
+        res.headers.get("X-Total-Count") ?? String(items.length)
+      );
+      const blob = await res.blob();
+
+      if (keyword && matchCount === 0) {
+        setTranscriptMsg(
+          `No calls out of ${totalCount} contained “${keyword}”. Nothing downloaded.`
+        );
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const now = new Date();
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+      a.download = `transcriptions_${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setTranscriptMsg(
+        keyword
+          ? `Downloaded ${matchCount} of ${totalCount} call${totalCount === 1 ? "" : "s"} containing “${keyword}”. Import the CSV into Google Sheets as a new tab.`
+          : `Downloaded ${matchCount} transcription${matchCount === 1 ? "" : "s"}. Import the CSV into Google Sheets as a new tab.`
+      );
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTranscribing(false);
     }
   };
 
@@ -272,18 +422,13 @@ export default function Page() {
       : 0;
 
   const stepDone = {
-    1: token.length > 0,
+    1: rows.length > 0,
     2: rows.length > 0,
-    3: rows.length > 0,
   };
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:py-16 space-y-8">
       <header className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)] shadow-sm">
-          <Sparkles className="h-3 w-3 text-[var(--accent)]" />
-          Breeze Buddy · Recording Extractor
-        </div>
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">
           Bulk-download call recordings
         </h1>
@@ -294,31 +439,9 @@ export default function Page() {
       </header>
 
       <Card>
-        <Step number={1} done={stepDone[1]} title="Bearer token" icon={KeyRound}>
-          <input
-            type="password"
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3.5 py-2.5 text-sm font-mono placeholder:font-sans placeholder:text-[var(--muted-2)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
-            placeholder="Paste your Authorization Bearer token"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            autoComplete="off"
-          />
-          <label className="mt-2 inline-flex items-center gap-2 text-xs text-[var(--muted)] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={rememberToken}
-              onChange={(e) => setRememberToken(e.target.checked)}
-              className="h-3.5 w-3.5 rounded accent-[var(--accent)]"
-            />
-            Remember in this browser tab
-          </label>
-        </Step>
-      </Card>
-
-      <Card>
         <Step
-          number={2}
-          done={stepDone[2]}
+          number={1}
+          done={stepDone[1]}
           title="CSV file"
           icon={FileSpreadsheet}
         >
@@ -365,7 +488,7 @@ export default function Page() {
 
       {rows.length > 0 && (
         <Card>
-          <Step number={3} done={stepDone[3]} title="Filters" icon={Filter}>
+          <Step number={2} done={stepDone[2]} title="Filters" icon={Filter}>
             <div className="space-y-5">
               <div>
                 <label className="block text-xs font-medium text-[var(--muted)] mb-2">
@@ -578,6 +701,24 @@ export default function Page() {
 
       <div className="sticky bottom-4 z-10">
         <Card>
+          {rows.length > 0 && (
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-[var(--muted)] mb-1.5">
+                <Search className="inline h-3 w-3 mr-1 -mt-0.5" />
+                Transcript contains{" "}
+                <span className="text-[var(--muted-2)]">
+                  (optional — filters the transcription download only)
+                </span>
+              </label>
+              <input
+                type="text"
+                value={transcriptKeyword}
+                onChange={(e) => setTranscriptKeyword(e.target.value)}
+                placeholder="e.g. technical issue"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm placeholder:text-[var(--muted-2)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
+              />
+            </div>
+          )}
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-semibold tabular-nums">
@@ -608,6 +749,29 @@ export default function Page() {
               >
                 <Headphones className="h-4 w-4" />
                 {previewOpen ? "Hide preview" : "Preview & play"}
+              </button>
+              <button
+                type="button"
+                onClick={downloadTranscriptions}
+                disabled={
+                  busy ||
+                  transcribing ||
+                  rows.length === 0 ||
+                  filtered.length === 0
+                }
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] text-sm font-medium hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {transcribing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Fetching…
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" />
+                    Download transcription
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -670,6 +834,12 @@ export default function Page() {
               </span>
             </p>
           )}
+          {transcriptMsg && (
+            <p className="mt-3 flex items-start gap-2 text-sm text-[var(--success)]">
+              <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{transcriptMsg}</span>
+            </p>
+          )}
           {errorMessage && (
             <p className="mt-3 flex items-start gap-2 text-sm text-[var(--danger)]">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -680,7 +850,7 @@ export default function Page() {
       </div>
 
       {previewOpen && filtered.length > 0 && token && (
-        <PreviewPanel rows={filtered} token={token} />
+        <PreviewPanel rows={filtered} />
       )}
 
       <footer className="pt-2 text-xs text-[var(--muted)] flex flex-wrap gap-x-4 gap-y-1">
