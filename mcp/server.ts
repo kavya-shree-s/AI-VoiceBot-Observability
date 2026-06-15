@@ -12,6 +12,12 @@ import {
 } from "../lib/mcp/tools.js";
 import { failureModeTaxonomy } from "../lib/breeze/taxonomy.js";
 import type { CallRef } from "../lib/breeze/types.js";
+import Anthropic from "@anthropic-ai/sdk";
+import { taxonomyFor } from "../lib/insights/reasonTaxonomy.js";
+import { classifyCall } from "../lib/insights/classify.js";
+import { makeHaikuClassifier } from "../lib/insights/haikuClassifier.js";
+import { reasonBreakdown } from "../lib/insights/aggregate.js";
+import type { CallLabel } from "../lib/insights/types.js";
 
 const callRefShape = {
   leadId: z.string(),
@@ -129,6 +135,51 @@ function buildServer(token: string): McpServer {
         },
       ],
     })
+  );
+
+  server.registerTool(
+    "classify_call",
+    {
+      description:
+        "Classify one transcript into the fixed reason taxonomy for its template. " +
+        "Returns reason_category, reason_detail, driverClaimedOnline, explicitHuman.",
+      inputSchema: {
+        template: z.string(),
+        transcription: z.string(),
+        callId: z.string(),
+        phone: z.string().optional(),
+        name: z.string().optional(),
+        startTime: z.string().optional(),
+      },
+    },
+    async ({ template, transcription, callId, phone, name, startTime }) => {
+      const classify = makeHaikuClassifier(new Anthropic());
+      const label = await classifyCall(
+        {
+          leadId: callId,
+          callId,
+          phone: phone ?? "",
+          name: name ?? "",
+          outcome: "",
+          template,
+          startTime: startTime ?? "",
+        },
+        { leadId: callId, transcription, recordingUrl: "" },
+        taxonomyFor(template),
+        classify
+      );
+      return json(label);
+    }
+  );
+
+  server.registerTool(
+    "aggregate_breakdown",
+    {
+      description:
+        "Aggregate an array of classified call labels into exact reason-breakdown counts and %.",
+      inputSchema: { labels: z.array(z.any()) },
+    },
+    async ({ labels }) => json(reasonBreakdown(labels as CallLabel[]))
   );
 
   return server;

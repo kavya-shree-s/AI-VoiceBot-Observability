@@ -21,7 +21,7 @@ describe("buildWorkbook", () => {
     expect(buf.byteLength).toBeGreaterThan(0);
 
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buf);
+    await wb.xlsx.load(buf as unknown as ArrayBuffer);
     const names = wb.worksheets.map((w) => w.name);
     expect(names).toEqual(
       expect.arrayContaining(["Summary", "Reason_breakdown", "Per_call"])
