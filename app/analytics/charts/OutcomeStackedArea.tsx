@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -8,17 +8,18 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 import { useCallBasedTrend } from "../hooks";
 import { Loading, ErrorBox, EmptyBox } from "../States";
-import { colorFor } from "./colors";
+import { ChartShell } from "./ChartShell";
+import { colorFor, OTHER_COLOR } from "./colors";
 
 const TOP_N = 6;
 
 export function OutcomeStackedArea() {
   const { data, isLoading, error } = useCallBasedTrend("day");
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
 
   const { points, keys } = useMemo(() => {
     if (!data) return { points: [], keys: [] as string[] };
@@ -45,45 +46,93 @@ export function OutcomeStackedArea() {
         if (hasOther) row.Other = other;
         return row;
       })
-      .sort((a, b) =>
-        String(a.date).localeCompare(String(b.date))
-      );
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
     return { points: p, keys: k };
   }, [data]);
 
+  const toggle = (k: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
+
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-      <h3 className="text-sm font-semibold mb-3">Outcome Trend (stacked)</h3>
-      {isLoading && <Loading label="Loading trend…" />}
+    <ChartShell
+      title="Outcome trend"
+      subtitle="Daily composition (click legend to filter)"
+    >
+      {isLoading && <Loading label="Loading…" />}
       {error && <ErrorBox message={(error as Error).message} />}
       {!isLoading && !error && points.length === 0 && (
         <EmptyBox label="No trend data for this range." />
       )}
       {!isLoading && !error && points.length > 0 && (
-        <ResponsiveContainer width="100%" height={320}>
-          <AreaChart
-            data={points}
-            margin={{ top: 8, right: 16, left: 0, bottom: 4 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            {keys.map((k, i) => (
-              <Area
-                key={k}
-                type="monotone"
-                dataKey={k}
-                stackId="1"
-                stroke={colorFor(i)}
-                fill={colorFor(i)}
-                fillOpacity={0.6}
+        <>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart
+              data={points}
+              margin={{ top: 8, right: 16, left: 0, bottom: 4 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "var(--muted)" }}
+                axisLine={false}
+                tickLine={false}
               />
-            ))}
-          </AreaChart>
-        </ResponsiveContainer>
+              <YAxis
+                tick={{ fontSize: 10, fill: "var(--muted)" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip />
+              {keys.map((k, i) => {
+                const color = k === "Other" ? OTHER_COLOR : colorFor(i);
+                return (
+                  <Area
+                    key={k}
+                    type="monotone"
+                    dataKey={k}
+                    stackId="1"
+                    stroke={color}
+                    fill={color}
+                    fillOpacity={hidden.has(k) ? 0 : 0.65}
+                    strokeWidth={hidden.has(k) ? 0 : 1.5}
+                    animationDuration={400}
+                  />
+                );
+              })}
+            </AreaChart>
+          </ResponsiveContainer>
+          <div className="mt-2 flex flex-wrap gap-1.5 px-2 pb-1">
+            {keys.map((k, i) => {
+              const active = !hidden.has(k);
+              const color = k === "Other" ? "var(--muted-2)" : colorFor(i);
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => toggle(k)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition ${
+                    active
+                      ? "border-[var(--border-strong)] text-[var(--foreground)]"
+                      : "border-[var(--border)] text-[var(--muted-2)] line-through"
+                  }`}
+                >
+                  <span
+                    className="h-2 w-2 rounded-sm"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="font-mono">{k}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
-    </section>
+    </ChartShell>
   );
 }

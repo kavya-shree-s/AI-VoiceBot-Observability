@@ -5,12 +5,13 @@ import {
   Phone,
   CheckCircle2,
   ArrowRightLeft,
-  Percent,
   Sparkles,
-  Clock,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from "lucide-react";
 import { deriveKpis } from "@/lib/analytics/derive";
-import { usePerformance } from "../hooks";
+import { usePerformance, usePerformancePrev } from "../hooks";
 import { Loading, ErrorBox } from "../States";
 
 function pct(n: number): string {
@@ -23,43 +24,154 @@ function num(n: number): string {
   return n.toLocaleString();
 }
 
-export function KpiCards() {
-  const { data, isLoading, error } = usePerformance();
-  const kpis = useMemo(() => (data ? deriveKpis(data.results) : null), [data]);
+function deltaPp(now: number, prior: number | undefined): number | null {
+  if (typeof prior !== "number" || !Number.isFinite(prior)) return null;
+  return now - prior;
+}
 
-  if (isLoading) return <Loading label="Loading KPIs…" />;
-  if (error) return <ErrorBox message={(error as Error).message} />;
+export function KpiCards() {
+  const cur = usePerformance();
+  const prev = usePerformancePrev();
+
+  const kpis = useMemo(
+    () => (cur.data ? deriveKpis(cur.data.results) : null),
+    [cur.data]
+  );
+  const kpisPrev = useMemo(
+    () => (prev.data ? deriveKpis(prev.data.results) : null),
+    [prev.data]
+  );
+
+  if (cur.isLoading) return <Loading label="Loading KPIs…" />;
+  if (cur.error) return <ErrorBox message={(cur.error as Error).message} />;
   if (!kpis) return null;
 
   const cards: Array<{
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     value: string;
+    delta: number | null;
+    deltaSuffix: "pp" | "%" | "count";
+    invertColor?: boolean;
   }> = [
-    { icon: Phone, label: "Total Calls", value: num(kpis.totalCalls) },
-    { icon: CheckCircle2, label: "Resolved Calls", value: num(kpis.resolvedCalls) },
-    { icon: Percent, label: "Resolution Rate", value: pct(kpis.resolutionRate) },
-    { icon: ArrowRightLeft, label: "Transferred Calls", value: num(kpis.transferredCalls) },
-    { icon: Percent, label: "Transfer Rate", value: pct(kpis.transferRate) },
-    { icon: Sparkles, label: "Test Ride Success Rate", value: pct(kpis.testRideSuccessRate) },
-    { icon: Phone, label: "Answer Rate", value: pct(kpis.answerRate) },
-    { icon: Clock, label: "Avg Duration", value: `${kpis.averageDuration.toFixed(1)}s` },
+    {
+      icon: Phone,
+      label: "Total calls",
+      value: num(kpis.totalCalls),
+      delta:
+        kpisPrev && kpisPrev.totalCalls
+          ? ((kpis.totalCalls - kpisPrev.totalCalls) / kpisPrev.totalCalls) * 100
+          : null,
+      deltaSuffix: "%",
+    },
+    {
+      icon: CheckCircle2,
+      label: "Resolved calls",
+      value: num(kpis.resolvedCalls),
+      delta:
+        kpisPrev && kpisPrev.resolvedCalls
+          ? ((kpis.resolvedCalls - kpisPrev.resolvedCalls) /
+              kpisPrev.resolvedCalls) *
+            100
+          : null,
+      deltaSuffix: "%",
+    },
+    {
+      icon: Sparkles,
+      label: "Resolution rate",
+      value: pct(kpis.resolutionRate),
+      delta: deltaPp(kpis.resolutionRate, kpisPrev?.resolutionRate),
+      deltaSuffix: "pp",
+    },
+    {
+      icon: ArrowRightLeft,
+      label: "Transferred calls",
+      value: num(kpis.transferredCalls),
+      delta:
+        kpisPrev && kpisPrev.transferredCalls
+          ? ((kpis.transferredCalls - kpisPrev.transferredCalls) /
+              kpisPrev.transferredCalls) *
+            100
+          : null,
+      deltaSuffix: "%",
+      invertColor: true,
+    },
+    {
+      icon: ArrowRightLeft,
+      label: "Transfer rate",
+      value: pct(kpis.transferRate),
+      delta: deltaPp(kpis.transferRate, kpisPrev?.transferRate),
+      deltaSuffix: "pp",
+      invertColor: true,
+    },
+    {
+      icon: Sparkles,
+      label: "Test-ride success",
+      value: pct(kpis.testRideSuccessRate),
+      delta: deltaPp(kpis.testRideSuccessRate, kpisPrev?.testRideSuccessRate),
+      deltaSuffix: "pp",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
       {cards.map((c) => (
-        <div
-          key={c.label}
-          className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
-        >
-          <div className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-            <c.icon className="h-3.5 w-3.5" />
-            {c.label}
-          </div>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{c.value}</p>
-        </div>
+        <Card key={c.label} {...c} />
       ))}
+    </div>
+  );
+}
+
+function Card({
+  icon: Icon,
+  label,
+  value,
+  delta,
+  deltaSuffix,
+  invertColor,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  delta: number | null;
+  deltaSuffix: "pp" | "%" | "count";
+  invertColor?: boolean;
+}) {
+  const isFlat = delta === null || Math.abs(delta) < 0.5;
+  const goodWhenUp = !invertColor;
+  const tone =
+    isFlat || delta === null
+      ? "text-[var(--muted)] bg-[var(--surface-muted)]"
+      : (delta > 0) === goodWhenUp
+        ? "text-[var(--success)] bg-[var(--success-soft)]"
+        : "text-[var(--danger)] bg-[var(--danger-soft)]";
+  const TrendIcon =
+    isFlat || delta === null
+      ? Minus
+      : delta > 0
+        ? TrendingUp
+        : TrendingDown;
+  return (
+    <div
+      className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3 shadow-[var(--shadow-sm)]"
+      style={{ borderRadius: "var(--radius-md)" }}
+    >
+      <div className="flex items-center gap-1.5 text-caption text-[var(--muted)]">
+        <Icon className="h-3 w-3" />
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <p className="text-h1 tabular-nums leading-none">{value}</p>
+        {delta !== null && (
+          <span
+            className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${tone}`}
+          >
+            <TrendIcon className="h-3 w-3" />
+            {Math.abs(delta).toFixed(deltaSuffix === "pp" ? 1 : 1)}
+            {deltaSuffix === "pp" ? "pp" : "%"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

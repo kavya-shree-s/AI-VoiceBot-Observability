@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { usePerformance } from "../hooks";
 import { Loading, ErrorBox, EmptyBox } from "../States";
+import { ChartShell } from "./ChartShell";
 import { colorFor } from "./colors";
 
 export function OutcomeBar() {
@@ -26,9 +27,8 @@ export function OutcomeBar() {
   }, [data]);
 
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-      <h3 className="text-sm font-semibold mb-3">Outcome Counts</h3>
-      {isLoading && <Loading label="Loading chart…" />}
+    <ChartShell title="Outcome counts" subtitle="Sorted by volume">
+      {isLoading && <Loading label="Loading…" />}
       {error && <ErrorBox message={(error as Error).message} />}
       {!isLoading && !error && rows.length === 0 && (
         <EmptyBox label="No outcomes in this range." />
@@ -36,24 +36,40 @@ export function OutcomeBar() {
       {!isLoading && !error && rows.length > 0 && (
         <ResponsiveContainer
           width="100%"
-          height={Math.max(260, rows.length * 28)}
+          height={Math.max(280, rows.length * 28)}
         >
           <BarChart
             data={rows}
             layout="vertical"
-            margin={{ top: 8, right: 24, left: 8, bottom: 4 }}
+            margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+            barCategoryGap={6}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis type="number" tick={{ fontSize: 11 }} />
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--border)"
+              horizontal={false}
+            />
+            <XAxis
+              type="number"
+              tick={{ fontSize: 10, fill: "var(--muted)" }}
+              axisLine={false}
+              tickLine={false}
+            />
             <YAxis
               type="category"
               dataKey="name"
-              width={170}
+              width={160}
               interval={0}
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: 10, fill: "var(--muted)" }}
+              axisLine={false}
+              tickLine={false}
             />
             <Tooltip cursor={{ fill: "var(--accent-soft)" }} />
-            <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+            <Bar
+              dataKey="count"
+              radius={[0, 4, 4, 0]}
+              animationDuration={400}
+            >
               {rows.map((r, i) => (
                 <Cell key={r.name} fill={colorFor(i)} />
               ))}
@@ -61,6 +77,6 @@ export function OutcomeBar() {
           </BarChart>
         </ResponsiveContainer>
       )}
-    </section>
+    </ChartShell>
   );
 }
