@@ -28,7 +28,6 @@ export function makeHaikuClassifier(client: Anthropic): ClassifyFn {
       output_config: {
         format: {
           type: "json_schema",
-          name: "call_label",
           schema: {
             type: "object",
             additionalProperties: false,
