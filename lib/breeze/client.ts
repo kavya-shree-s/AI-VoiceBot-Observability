@@ -1,6 +1,6 @@
 import pLimit from "p-limit";
 import { fetchLead } from "../leadFetcher";
-import { extractTranscription } from "../transcription";
+import { extractTranscription, extractRecordingUrl } from "../transcription";
 import type { TranscriptResult } from "./types";
 
 const CONCURRENCY = 5;
@@ -46,6 +46,38 @@ export async function searchTranscripts(
   return batch
     .filter((b) => !b.error && b.transcription.toLowerCase().includes(q))
     .map((b) => ({ leadId: b.leadId, snippet: snippetAround(b.transcription, q) }));
+}
+
+export type LeadDetails = {
+  leadId: string;
+  transcription: string;
+  recordingUrl: string;
+  error?: string;
+};
+
+/** Like fetchTranscriptsBatch but also returns the recording URL (for Per_call).
+ *  Not capped at MAX_BATCH — the census loops the whole population; concurrency
+ *  is bounded via CONCURRENCY. */
+export async function fetchLeadDetailsBatch(
+  ids: string[],
+  token: string
+): Promise<LeadDetails[]> {
+  const limit = pLimit(CONCURRENCY);
+  return Promise.all(
+    ids.map((leadId) =>
+      limit(async (): Promise<LeadDetails> => {
+        const res = await fetchLead(leadId, token);
+        if (!res.ok) {
+          return { leadId, transcription: "", recordingUrl: "", error: res.message };
+        }
+        return {
+          leadId,
+          transcription: extractTranscription(res.data),
+          recordingUrl: extractRecordingUrl(res.data),
+        };
+      })
+    )
+  );
 }
 
 const ANALYTICS_URL =
