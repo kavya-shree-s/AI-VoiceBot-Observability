@@ -25,6 +25,7 @@ import { filterRows, uniqueOutcomes, uniqueTemplates } from "@/lib/filter";
 import { buildAudioFilename } from "@/lib/sanitize";
 import type { CsvRow } from "@/lib/types";
 import { PreviewPanel } from "./PreviewPanel";
+import { InsightsMiner } from "./InsightsMiner";
 import { useAuth } from "./auth-context";
 import { LoginGate } from "./LoginGate";
 import { AnalyticsTab } from "./analytics/AnalyticsTab";
@@ -808,6 +809,10 @@ function Extractor() {
           )}
         </Card>
       </div>
+
+      {rows.length > 0 && token && (
+        <InsightsMiner rows={filtered} token={token} />
+      )}
 
       {previewOpen && filtered.length > 0 && token && (
         <PreviewPanel rows={filtered} />
