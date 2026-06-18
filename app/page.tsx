@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  LogOut,
   Upload,
   Filter,
   Download,
@@ -12,7 +11,6 @@ import {
   AlertCircle,
   FileSpreadsheet,
   Calendar,
-  Sparkles,
   RotateCcw,
   Phone,
   Layers,
@@ -27,9 +25,12 @@ import { filterRows, uniqueOutcomes, uniqueTemplates } from "@/lib/filter";
 import { buildAudioFilename } from "@/lib/sanitize";
 import type { CsvRow } from "@/lib/types";
 import { PreviewPanel } from "./PreviewPanel";
+import { InsightsMiner } from "./InsightsMiner";
 import { useAuth } from "./auth-context";
 import { LoginGate } from "./LoginGate";
 import { AnalyticsTab } from "./analytics/AnalyticsTab";
+import { TopBar } from "./TopBar";
+import { CommandPalette } from "./CommandPalette";
 
 type Template = { id: string; name: string; is_active: boolean };
 
@@ -45,66 +46,28 @@ export default function Page() {
 type TabKey = "extractor" | "analytics";
 
 function Shell() {
-  const { signOut } = useAuth();
   const [tab, setTab] = useState<TabKey>("extractor");
+  const [paletteOpen, setPaletteOpen] = useState(false);
   return (
     <>
-      <header className="mx-auto w-full max-w-6xl px-5 pt-8 sm:pt-10">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)] shadow-sm">
-            <Sparkles className="h-3 w-3 text-[var(--accent)]" />
-            Breeze Buddy
-          </div>
-          <div className="flex items-center gap-1">
-            <TabButton active={tab === "extractor"} onClick={() => setTab("extractor")}>
-              Extractor
-            </TabButton>
-            <TabButton active={tab === "analytics"} onClick={() => setTab("analytics")}>
-              Analytics
-            </TabButton>
-            <button
-              type="button"
-              onClick={() => signOut()}
-              className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--foreground)] transition"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <TopBar
+        tab={tab}
+        onTabChange={setTab}
+        onOpenPalette={() => setPaletteOpen(true)}
+      />
       {tab === "extractor" ? (
         <Extractor />
       ) : (
-        <main className="mx-auto w-full max-w-6xl px-5 py-8 sm:py-10">
+        <main className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 py-4">
           <AnalyticsTab />
         </main>
       )}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onSwitchTab={setTab}
+      />
     </>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-        active
-          ? "bg-[var(--accent)] text-white"
-          : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--border-strong)]"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -427,12 +390,10 @@ function Extractor() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:py-16 space-y-8">
-      <header className="space-y-3">
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-          Bulk-download call recordings
-        </h1>
-        <p className="text-sm sm:text-base text-[var(--muted)] max-w-xl">
+    <main className="mx-auto w-full max-w-3xl px-5 py-5 sm:py-7 space-y-4">
+      <header className="space-y-1">
+        <h1 className="text-display">Bulk-download call recordings</h1>
+        <p className="text-[13px] text-[var(--muted)] max-w-xl">
           Upload your daily CSV, filter the rows you care about, and grab every
           matching recording as a single ZIP — usually under a minute.
         </p>
@@ -848,6 +809,10 @@ function Extractor() {
           )}
         </Card>
       </div>
+
+      {rows.length > 0 && token && (
+        <InsightsMiner rows={filtered} token={token} />
+      )}
 
       {previewOpen && filtered.length > 0 && token && (
         <PreviewPanel rows={filtered} />

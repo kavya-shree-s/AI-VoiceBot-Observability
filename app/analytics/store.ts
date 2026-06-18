@@ -8,8 +8,10 @@ export type FiltersState = {
   date_from: string;
   date_to: string;
   outcomes: string[];
-  template: string; // empty string = all templates
+  templates: string[]; // empty = all templates
 };
+
+export const TEMPLATE_CAP = 10;
 
 type AnalyticsState = {
   draft: FiltersState;
@@ -18,7 +20,9 @@ type AnalyticsState = {
   setDraftTo: (v: string) => void;
   toggleDraftOutcome: (o: string) => void;
   clearDraftOutcomes: () => void;
-  setDraftTemplate: (name: string) => void;
+  toggleDraftTemplate: (name: string) => void;
+  setDraftTemplates: (names: string[]) => void;
+  clearDraftTemplates: () => void;
   applyPreset: (key: PresetKey) => void;
   apply: () => void;
   reset: () => void;
@@ -26,7 +30,7 @@ type AnalyticsState = {
 
 function makeDefault(): FiltersState {
   const r: DateRange = presetRange("last7days", new Date());
-  return { date_from: r.from, date_to: r.to, outcomes: [], template: "" };
+  return { date_from: r.from, date_to: r.to, outcomes: [], templates: [] };
 }
 
 export const useAnalyticsStore = create<AnalyticsState>((set) => {
@@ -48,8 +52,23 @@ export const useAnalyticsStore = create<AnalyticsState>((set) => {
       })),
     clearDraftOutcomes: () =>
       set((s) => ({ draft: { ...s.draft, outcomes: [] } })),
-    setDraftTemplate: (name) =>
-      set((s) => ({ draft: { ...s.draft, template: name } })),
+    toggleDraftTemplate: (name) =>
+      set((s) => {
+        const current = s.draft.templates;
+        if (current.includes(name)) {
+          return {
+            draft: { ...s.draft, templates: current.filter((x) => x !== name) },
+          };
+        }
+        if (current.length >= TEMPLATE_CAP) return {};
+        return { draft: { ...s.draft, templates: [...current, name] } };
+      }),
+    setDraftTemplates: (names) =>
+      set((s) => ({
+        draft: { ...s.draft, templates: names.slice(0, TEMPLATE_CAP) },
+      })),
+    clearDraftTemplates: () =>
+      set((s) => ({ draft: { ...s.draft, templates: [] } })),
     applyPreset: (key) => {
       const r = presetRange(key, new Date());
       set((s) => ({

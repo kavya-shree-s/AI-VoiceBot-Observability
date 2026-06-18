@@ -2,19 +2,19 @@
 
 import { useMemo, useState } from "react";
 import {
-  Calendar,
-  Filter,
   RotateCcw,
   Check,
   X,
   Layers,
   Search,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { PRESET_LABELS } from "@/lib/analytics/presets";
 import type { PresetKey } from "@/lib/analytics/types";
-import { useAnalyticsStore } from "../store";
+import { useAnalyticsStore, TEMPLATE_CAP } from "../store";
 import { useTemplates } from "../hooks";
+import { SavedViews } from "../SavedViews";
 
 const PRESETS: PresetKey[] = [
   "today",
@@ -51,13 +51,15 @@ export function FiltersPanel() {
   const setDraftTo = useAnalyticsStore((s) => s.setDraftTo);
   const toggleDraftOutcome = useAnalyticsStore((s) => s.toggleDraftOutcome);
   const clearDraftOutcomes = useAnalyticsStore((s) => s.clearDraftOutcomes);
-  const setDraftTemplate = useAnalyticsStore((s) => s.setDraftTemplate);
+  const toggleDraftTemplate = useAnalyticsStore((s) => s.toggleDraftTemplate);
+  const clearDraftTemplates = useAnalyticsStore((s) => s.clearDraftTemplates);
   const applyPreset = useAnalyticsStore((s) => s.applyPreset);
   const apply = useAnalyticsStore((s) => s.apply);
   const reset = useAnalyticsStore((s) => s.reset);
   const [outcomesOpen, setOutcomesOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [templateSearch, setTemplateSearch] = useState("");
+
   const {
     data: templates,
     isLoading: templatesLoading,
@@ -71,253 +73,267 @@ export function FiltersPanel() {
   }, [templates, templateSearch]);
 
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6 shadow-sm space-y-4">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <Filter className="h-4 w-4 text-[var(--muted)]" />
-        Filters
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-[var(--muted)] mb-1.5">
-            <Calendar className="inline h-3 w-3 mr-1 -mt-0.5" />
-            From
-          </label>
-          <input
-            type="date"
-            value={draft.date_from}
-            onChange={(e) => setDraftFrom(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[var(--muted)] mb-1.5">
-            <Calendar className="inline h-3 w-3 mr-1 -mt-0.5" />
-            To
-          </label>
-          <input
-            type="date"
-            value={draft.date_to}
-            onChange={(e) => setDraftTo(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
-          />
-        </div>
-      </div>
-
-      <div>
-        <p className="text-xs font-medium text-[var(--muted)] mb-1.5">
-          Preset
-        </p>
-        <div className="flex flex-wrap gap-1.5">
+    <section
+      className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)] px-3 py-2.5"
+      style={{ borderRadius: "var(--radius-md)" }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Preset chips */}
+        <div className="flex flex-wrap items-center gap-1">
           {PRESETS.map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => applyPreset(p)}
-              className="px-2.5 py-1 rounded-full text-xs font-medium border border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--foreground)] transition"
+              className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--foreground)] transition"
             >
               {PRESET_LABELS[p]}
             </button>
           ))}
         </div>
-      </div>
 
-      <div>
-        <p className="text-xs font-medium text-[var(--muted)] mb-1.5">
-          <Layers className="inline h-3 w-3 mr-1 -mt-0.5" />
-          Template{" "}
-          <span className="text-[var(--muted-2)]">(none = all)</span>
-          {templatesLoading && (
-            <Loader2 className="inline ml-2 h-3 w-3 animate-spin text-[var(--accent)]" />
-          )}
-        </p>
-        {draft.template && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent)] text-white text-[11px] font-medium">
-              <span className="font-mono">{draft.template}</span>
-              <button
-                type="button"
-                aria-label="Clear template"
-                onClick={() => setDraftTemplate("")}
-                className="rounded-full hover:bg-white/20 p-0.5"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setTemplatesOpen((v) => !v)}
-          className="w-full inline-flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm hover:border-[var(--border-strong)] transition"
-        >
-          <span className="text-[var(--muted)] truncate">
-            {draft.template
-              ? `1 selected`
-              : templates && templates.length > 0
-                ? `Pick from ${templates.length} templates`
-                : "No templates available"}
-          </span>
-          <Search className="h-3.5 w-3.5 text-[var(--muted-2)]" />
-        </button>
-        {templatesOpen && (
-          <div className="mt-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg overflow-hidden">
-            <div className="p-2 border-b border-[var(--border)]">
-              <input
-                type="text"
-                autoFocus
-                value={templateSearch}
-                onChange={(e) => setTemplateSearch(e.target.value)}
-                placeholder="Search templates…"
-                className="w-full rounded-md bg-[var(--surface-muted)] border border-transparent focus:border-[var(--accent)] focus:outline-none px-2 py-1.5 text-sm"
-              />
+        <Divider />
+
+        {/* Date inputs */}
+        <input
+          type="date"
+          value={draft.date_from}
+          onChange={(e) => setDraftFrom(e.target.value)}
+          aria-label="From date"
+          className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[12px] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] transition"
+        />
+        <span className="text-[var(--muted-2)] text-[11px]">→</span>
+        <input
+          type="date"
+          value={draft.date_to}
+          onChange={(e) => setDraftTo(e.target.value)}
+          aria-label="To date"
+          className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[12px] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] transition"
+        />
+
+        <Divider />
+
+        {/* Template multi-select */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setTemplatesOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[12px] hover:border-[var(--border-strong)] transition"
+          >
+            <Layers className="h-3 w-3" />
+            <span>Templates</span>
+            {draft.templates.length > 0 && (
+              <span className="rounded bg-[var(--accent)] px-1 py-0.5 text-[10px] font-medium text-[var(--accent-fg)] tabular-nums">
+                {draft.templates.length}
+              </span>
+            )}
+            {templatesLoading && (
+              <Loader2 className="h-3 w-3 animate-spin text-[var(--accent)]" />
+            )}
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </button>
+          {templatesOpen && (
+            <div className="absolute left-0 mt-1 w-[440px] max-w-[90vw] rounded-[10px] border border-[var(--border)] bg-[var(--surface-raised)] shadow-[var(--shadow-lg)] z-30 overflow-hidden">
+              <div className="p-1.5 border-b border-[var(--border)]">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--muted-2)]" />
+                  <input
+                    autoFocus
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
+                    placeholder="Search templates…"
+                    className="w-full pl-6 pr-2 py-1 rounded-md bg-[var(--surface-muted)] text-[12px] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  />
+                </div>
+              </div>
+              <ul className="max-h-60 overflow-y-auto py-1 text-[12px]">
+                {visibleTemplates.length === 0 && !templatesLoading && (
+                  <li className="px-3 py-2 text-[11px] text-[var(--muted-2)]">
+                    {templatesError
+                      ? `Couldn't load: ${(templatesError as Error).message}`
+                      : "No templates match."}
+                  </li>
+                )}
+                {visibleTemplates.map((t) => {
+                  const active = draft.templates.includes(t.name);
+                  const atCap =
+                    !active && draft.templates.length >= TEMPLATE_CAP;
+                  return (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        onClick={() => toggleDraftTemplate(t.name)}
+                        disabled={atCap}
+                        title={atCap ? `Limit ${TEMPLATE_CAP} templates` : t.name}
+                        className={`w-full flex items-start justify-between gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-muted)] transition disabled:opacity-40 disabled:cursor-not-allowed ${active ? "text-[var(--accent)]" : ""}`}
+                      >
+                        <span className="font-mono text-[11px] leading-snug break-all flex-1 min-w-0">
+                          {t.name}
+                        </span>
+                        <span className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                          {!t.is_active && (
+                            <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--muted-2)]">
+                              inactive
+                            </span>
+                          )}
+                          {active && <Check className="h-3 w-3" />}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="flex items-center justify-between border-t border-[var(--border)] px-3 py-1.5 text-[11px]">
+                <span className="text-[var(--muted-2)]">
+                  {draft.templates.length}/{TEMPLATE_CAP} selected
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={clearDraftTemplates}
+                    disabled={draft.templates.length === 0}
+                    className="text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-40"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplatesOpen(false)}
+                    className="font-medium text-[var(--accent)] hover:opacity-80"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
             </div>
-            <ul className="max-h-60 overflow-y-auto py-1 text-sm">
-              <li>
+          )}
+        </div>
+
+        {/* Selected template chips */}
+        {draft.templates.length > 0 && (
+          <div className="flex flex-wrap gap-1 max-w-full">
+            {draft.templates.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-mono"
+                title={t}
+              >
+                <span className="truncate max-w-[200px]">{t}</span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setDraftTemplate("");
-                    setTemplatesOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-[var(--accent-soft)] transition ${draft.template === "" ? "text-[var(--accent)]" : ""}`}
+                  aria-label={`Remove ${t}`}
+                  onClick={() => toggleDraftTemplate(t)}
+                  className="rounded-full hover:bg-white/20 p-0.5"
                 >
-                  <span className="text-xs italic">All templates</span>
-                  {draft.template === "" && <Check className="h-3.5 w-3.5" />}
+                  <X className="h-2.5 w-2.5" />
                 </button>
-              </li>
-              {visibleTemplates.length === 0 && (
-                <li className="px-3 py-2 text-xs text-[var(--muted-2)]">
-                  {templatesError
-                    ? `Couldn't load templates: ${(templatesError as Error).message}`
-                    : "No templates match."}
-                </li>
-              )}
-              {visibleTemplates.map((t) => {
-                const active = draft.template === t.name;
-                return (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraftTemplate(t.name);
-                        setTemplatesOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-[var(--accent-soft)] transition ${active ? "text-[var(--accent)]" : ""}`}
-                    >
-                      <span className="font-mono text-xs truncate">
-                        {t.name}
-                      </span>
-                      <span className="flex items-center gap-1.5 shrink-0">
-                        {!t.is_active && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--muted-2)]">
-                            inactive
-                          </span>
-                        )}
-                        {active && <Check className="h-3.5 w-3.5" />}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+              </span>
+            ))}
           </div>
         )}
-      </div>
 
-      <div>
-        <p className="text-xs font-medium text-[var(--muted)] mb-1.5">
-          Outcomes{" "}
-          <span className="text-[var(--muted-2)]">(none = all)</span>
-        </p>
+        {/* Outcomes multi-select */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setOutcomesOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[12px] hover:border-[var(--border-strong)] transition"
+          >
+            <span>Outcomes</span>
+            {draft.outcomes.length > 0 && (
+              <span className="rounded bg-[var(--accent)] px-1 py-0.5 text-[10px] font-medium text-[var(--accent-fg)]">
+                {draft.outcomes.length}
+              </span>
+            )}
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </button>
+          {outcomesOpen && (
+            <div className="absolute left-0 mt-1 w-60 rounded-[10px] border border-[var(--border)] bg-[var(--surface-raised)] shadow-[var(--shadow-lg)] z-30 overflow-hidden">
+              <ul className="max-h-60 overflow-y-auto py-1 text-[12px]">
+                {KNOWN_OUTCOMES.map((o) => {
+                  const active = draft.outcomes.includes(o);
+                  return (
+                    <li key={o}>
+                      <button
+                        type="button"
+                        onClick={() => toggleDraftOutcome(o)}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-muted)] transition ${active ? "text-[var(--accent)]" : ""}`}
+                      >
+                        <span className="font-mono text-[11px]">{o}</span>
+                        {active && <Check className="h-3 w-3" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="flex items-center justify-between border-t border-[var(--border)] px-3 py-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={clearDraftOutcomes}
+                  disabled={draft.outcomes.length === 0}
+                  className="text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-40"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOutcomesOpen(false)}
+                  className="font-medium text-[var(--accent)] hover:opacity-80"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Selected outcome chips */}
         {draft.outcomes.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {draft.outcomes.map((o) => (
               <span
                 key={o}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent)] text-white text-[11px] font-medium"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-medium font-mono"
               >
-                <span className="font-mono">{o}</span>
+                {o}
                 <button
                   type="button"
                   aria-label={`Remove ${o}`}
                   onClick={() => toggleDraftOutcome(o)}
                   className="rounded-full hover:bg-white/20 p-0.5"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-2.5 w-2.5" />
                 </button>
               </span>
             ))}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => setOutcomesOpen((v) => !v)}
-          className="w-full inline-flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm hover:border-[var(--border-strong)] transition"
-        >
-          <span className="text-[var(--muted)]">
-            {draft.outcomes.length > 0
-              ? `${draft.outcomes.length} selected`
-              : `Pick from ${KNOWN_OUTCOMES.length} outcomes`}
-          </span>
-        </button>
-        {outcomesOpen && (
-          <div className="mt-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg overflow-hidden">
-            <ul className="max-h-60 overflow-y-auto py-1 text-sm">
-              {KNOWN_OUTCOMES.map((o) => {
-                const active = draft.outcomes.includes(o);
-                return (
-                  <li key={o}>
-                    <button
-                      type="button"
-                      onClick={() => toggleDraftOutcome(o)}
-                      className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-[var(--accent-soft)] transition ${active ? "text-[var(--accent)]" : ""}`}
-                    >
-                      <span className="font-mono text-xs truncate">{o}</span>
-                      {active && <Check className="h-3.5 w-3.5" />}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="flex items-center justify-between border-t border-[var(--border)] px-3 py-1.5 text-xs">
-              <button
-                type="button"
-                onClick={clearDraftOutcomes}
-                disabled={draft.outcomes.length === 0}
-                className="text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-40"
-              >
-                Clear all
-              </button>
-              <button
-                type="button"
-                onClick={() => setOutcomesOpen(false)}
-                className="font-medium text-[var(--accent)] hover:opacity-80"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
 
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
-        <button
-          type="button"
-          onClick={reset}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] text-sm hover:border-[var(--border-strong)] transition"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          Reset
-        </button>
-        <button
-          type="button"
-          onClick={apply}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium shadow-sm hover:opacity-90 transition"
-        >
-          Apply filters
-        </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <SavedViews />
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[12px] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--border-strong)] transition"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={apply}
+            className="inline-flex items-center gap-1.5 rounded-[7px] bg-[var(--accent)] px-3 py-1 text-[12px] font-medium text-[var(--accent-fg)] shadow-[var(--shadow-sm)] hover:bg-[var(--accent-strong)] transition"
+          >
+            Apply
+          </button>
+        </div>
       </div>
     </section>
+  );
+}
+
+function Divider() {
+  return (
+    <span className="h-5 w-px bg-[var(--border)] mx-0.5" aria-hidden="true" />
   );
 }

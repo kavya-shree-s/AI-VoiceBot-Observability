@@ -45,34 +45,36 @@ export function LoginGate() {
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-12">
-      <div className="space-y-6">
-        <header className="space-y-3 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)] shadow-sm">
-            <Sparkles className="h-3 w-3 text-[var(--accent)]" />
-            Breeze Buddy · Recording Extractor
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-5 py-12">
+      <div className="space-y-5">
+        <header className="space-y-2 text-center">
+          <div className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-[var(--accent)] text-[var(--accent-fg)] mx-auto">
+            <Sparkles className="h-4 w-4" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-sm text-[var(--muted)]">
+          <h1 className="text-h1">Sign in to Breeze Buddy</h1>
+          <p className="text-[13px] text-[var(--muted)]">
             Use your Breeze Buddy credentials to continue.
           </p>
         </header>
 
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6 shadow-sm">
+        <section
+          className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-md)]"
+          style={{ borderRadius: "var(--radius-lg)" }}
+        >
           {sessionExpired && !error && (
-            <p className="mb-4 flex items-start gap-2 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-3 py-2 text-sm text-[var(--warning)]">
+            <p className="mb-4 flex items-start gap-2 rounded-[8px] border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-3 py-2 text-[13px] text-[var(--warning)]">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>Your session expired. Please sign in again.</span>
             </p>
           )}
 
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} className="space-y-3">
             <div>
               <label
                 htmlFor="username"
-                className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]"
+                className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--muted)]"
               >
-                <User className="h-3.5 w-3.5" />
+                <User className="h-3 w-3" />
                 Username
               </label>
               <input
@@ -82,16 +84,16 @@ export function LoginGate() {
                 autoFocus
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
+                className="w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-[var(--accent)] transition"
               />
             </div>
 
             <div>
               <label
                 htmlFor="password"
-                className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]"
+                className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--muted)]"
               >
-                <Lock className="h-3.5 w-3.5" />
+                <Lock className="h-3 w-3" />
                 Password
               </label>
               <input
@@ -100,13 +102,13 @@ export function LoginGate() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition"
+                className="w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-[var(--accent)] transition"
               />
             </div>
 
             {error && (
-              <p className="flex items-start gap-2 text-sm text-[var(--danger)]">
-                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <p className="flex items-start gap-2 text-[12px] text-[var(--danger)]">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 <span>{error}</span>
               </p>
             )}
@@ -114,7 +116,7 @@ export function LoginGate() {
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--accent)] px-4 py-2 text-[13px] font-medium text-[var(--accent-fg)] shadow-[var(--shadow-sm)] hover:bg-[var(--accent-strong)] disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               {submitting ? (
                 <>
