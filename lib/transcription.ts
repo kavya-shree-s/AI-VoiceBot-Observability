@@ -1,4 +1,5 @@
 export type TranscriptRow = {
+  leadId: string;
   phone: string;
   name: string;
   callId: string;
@@ -70,6 +71,7 @@ export function filterByKeyword(
 }
 
 const COLUMNS: Array<[keyof TranscriptRow, string]> = [
+  ["leadId", "lead_id"],
   ["phone", "phone"],
   ["name", "name"],
   ["callId", "call_id"],

@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     body.items.map((item) =>
       limit(async (): Promise<TranscriptRow> => {
         const base = {
+          leadId: item.leadId ?? "",
           phone: item.phone ?? "",
           name: item.name ?? "",
           callId: item.callId,

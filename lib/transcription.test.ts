@@ -10,6 +10,7 @@ import {
 } from "./transcription";
 
 const makeRow = (overrides: Partial<TranscriptRow> = {}): TranscriptRow => ({
+  leadId: "lead-1",
   phone: "919343922922",
   name: "Ravi",
   callId: "abc-123",
@@ -123,6 +124,7 @@ describe("filterByKeyword", () => {
 
 describe("toCsv", () => {
   const row: TranscriptRow = {
+    leadId: "lead-1",
     phone: "919343922922",
     name: "Ravi",
     callId: "abc-123",
@@ -139,7 +141,7 @@ describe("toCsv", () => {
     const csv = toCsv([row]);
     const lines = csv.split("\n");
     expect(lines[0]).toBe(
-      "phone,name,call_id,template,template_id,outcome,call_ended_by,start_time,recording_url,transcription"
+      "lead_id,phone,name,call_id,template,template_id,outcome,call_ended_by,start_time,recording_url,transcription"
     );
     expect(csv).toContain("919343922922");
     expect(csv).toContain("namma-yatri-block-support");

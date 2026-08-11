@@ -13,7 +13,7 @@ import {
   LogOut,
   Calendar,
 } from "lucide-react";
-import { useAuth } from "./auth-context";
+import { useAuth, usingStaticToken } from "./auth-context";
 import { useTheme, type ThemeChoice } from "./ThemeProvider";
 import { useAnalyticsStore } from "./analytics/store";
 
@@ -160,7 +160,8 @@ export function TopBar({
             )}
           </div>
 
-          {/* User menu */}
+          {/* User menu — only sign-out lives here, so it's pointless on a static token */}
+          {!usingStaticToken && (
           <div className="relative">
             <button
               type="button"
@@ -186,6 +187,7 @@ export function TopBar({
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
     </header>
